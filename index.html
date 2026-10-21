@@ -32,7 +32,7 @@ button:disabled{opacity:.4;cursor:default}
 .step.pass .num{background:var(--ok)}
 .ok{color:var(--ok)}.bad{color:var(--bad)}
 pre{background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:10px;overflow-x:auto;font:.88rem/1.5 ui-monospace,Menlo,Consolas,monospace}
-input[type=text]{font:inherit;width:100%;padding:10px;margin:4px 0 14px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx)}
+input[type=text],input[type=password]{font:inherit;width:100%;padding:10px;margin:4px 0 14px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx)}
 .opt{display:block;width:100%;text-align:left;background:var(--card);color:var(--tx);border:1px solid var(--bd);margin:8px 0;font-weight:400}
 .opt.on{border-color:var(--ac);outline:2px solid var(--ac)}
 .kartu{border:2px solid var(--ac);text-align:center;padding:18px 16px}
@@ -60,36 +60,44 @@ table.k td:last-child{text-align:right}
 <div id="app"></div>
 <script>
 const PASS=70;
-const FORM_URL='';
+const SB='https://hihfnbnlhkkmxkrkknpv.supabase.co';
+const KEY='sb_publishable_TMWv8pAbDpkUel8StVSBoQ_ZGerMesa';
+async function api(path,opt={}){
+  const r=await fetch(SB+path,{...opt,headers:{apikey:KEY,'Content-Type':'application/json',...(opt.headers||{})}});
+  const t=await r.text();let j;try{j=JSON.parse(t)}catch(e){j=t}
+  if(!r.ok)throw new Error((j&&(j.message||j.msg||j.error_description))||'Tidak dapat terhubung ke server');
+  return j;
+}
+const rpc=(fn,args)=>api('/rest/v1/rpc/'+fn,{method:'POST',body:JSON.stringify(args)});
 const M=[
 {id:'m1',t:'Konsep Algoritma',d:'Algoritma, flowchart, pseudocode',
  s:[{h:'Apa itu algoritma?',b:`<p>Algoritma adalah urutan langkah yang jelas dan berhingga untuk menyelesaikan suatu masalah. Contohnya langkah membuat teh, atau mencari bilangan terbesar dari tiga angka.</p><p>Algoritma yang baik punya input, output, langkah yang tidak ambigu, pasti berhenti, dan efektif.</p>`},
     {h:'Flowchart dan pseudocode',b:`<p>Flowchart menggambar algoritma dengan simbol: oval untuk mulai/selesai, jajar genjang untuk input/output, persegi untuk proses, belah ketupat untuk keputusan.</p><p>Pseudocode menulis langkah dengan bahasa mirip kode tetapi bebas sintaks:</p><pre>MULAI\n  BACA a, b\n  hasil ← a + b\n  TAMPILKAN hasil\nSELESAI</pre>`}],
- q:[{q:'Ciri algoritma yang benar adalah…',o:['Boleh berjalan tanpa henti','Langkahnya jelas dan berhingga','Tidak membutuhkan input','Harus memakai bahasa Python'],a:1},
-    {q:'Simbol belah ketupat pada flowchart berarti…',o:['Mulai','Proses','Keputusan','Output'],a:2},
-    {q:'Penulisan langkah dengan bahasa mirip kode tanpa sintaks ketat disebut…',o:['Pseudocode','Compiler','Debugging','Syntax'],a:0},
-    {q:'Simbol oval pada flowchart dipakai untuk…',o:['Keputusan','Mulai atau selesai','Perhitungan','Input data'],a:1}]},
+ q:[{q:'Ciri algoritma yang benar adalah…',o:['Boleh berjalan tanpa henti','Langkahnya jelas dan berhingga','Tidak membutuhkan input','Harus memakai bahasa Python']},
+    {q:'Simbol belah ketupat pada flowchart berarti…',o:['Mulai','Proses','Keputusan','Output']},
+    {q:'Penulisan langkah dengan bahasa mirip kode tanpa sintaks ketat disebut…',o:['Pseudocode','Compiler','Debugging','Syntax']},
+    {q:'Simbol oval pada flowchart dipakai untuk…',o:['Keputusan','Mulai atau selesai','Perhitungan','Input data']}]},
 {id:'m2',t:'Variabel, Tipe Data, Operator',d:'Wadah nilai dan cara mengolahnya',
  s:[{h:'Variabel dan tipe data',b:`<p>Variabel adalah wadah bernama untuk menyimpan nilai. Tipe data umum: integer (bilangan bulat), float (desimal), string (teks), boolean (benar/salah).</p><pre>umur ← 16\nnama ← "Sari"\nlulus ← benar</pre>`},
     {h:'Operator',b:`<p>Aritmetika: + − × ÷ dan MOD (sisa bagi). Perbandingan: =, ≠, &lt;, &gt;. Logika: AND, OR, NOT.</p><p>Contoh: 17 MOD 5 menghasilkan 2.</p>`}],
- q:[{q:'Tipe data yang tepat untuk menyimpan 3,14 adalah…',o:['Integer','Float','Boolean','String'],a:1},
-    {q:'Hasil dari 17 MOD 5 adalah…',o:['3','2','12','3,4'],a:1},
-    {q:'Nilai boolean hanya dapat berupa…',o:['Angka 0 sampai 9','Teks bebas','Benar atau salah','Desimal'],a:2},
-    {q:'Operator AND bernilai benar jika…',o:['Salah satu kondisi benar','Kedua kondisi benar','Kedua kondisi salah','Tidak ada kondisi'],a:1}]},
+ q:[{q:'Tipe data yang tepat untuk menyimpan 3,14 adalah…',o:['Integer','Float','Boolean','String']},
+    {q:'Hasil dari 17 MOD 5 adalah…',o:['3','2','12','3,4']},
+    {q:'Nilai boolean hanya dapat berupa…',o:['Angka 0 sampai 9','Teks bebas','Benar atau salah','Desimal']},
+    {q:'Operator AND bernilai benar jika…',o:['Salah satu kondisi benar','Kedua kondisi benar','Kedua kondisi salah','Tidak ada kondisi']}]},
 {id:'m3',t:'Percabangan',d:'Memilih langkah dengan if/else',
  s:[{h:'Struktur if/else',b:`<p>Percabangan memilih langkah berdasarkan kondisi.</p><pre>JIKA nilai ≥ 70 MAKA\n  TAMPILKAN "Lulus"\nSELAIN ITU\n  TAMPILKAN "Belum lulus"\nAKHIR JIKA</pre>`},
     {h:'Percabangan bertingkat',b:`<p>Gunakan SELAIN ITU JIKA untuk beberapa kondisi. Kondisi diperiksa dari atas ke bawah; yang pertama benar dijalankan dan sisanya dilewati.</p>`}],
- q:[{q:'Percabangan dipakai untuk…',o:['Mengulang langkah','Memilih langkah berdasarkan kondisi','Menyimpan data','Menghentikan program'],a:1},
-    {q:'Jika nilai = 70, hasil kondisi “nilai > 70” adalah…',o:['Benar','Salah','Error','Tidak tentu'],a:1},
-    {q:'Pada if/else bertingkat, kondisi diperiksa…',o:['Dari bawah ke atas','Secara acak','Dari atas sampai ada yang benar','Semuanya sekaligus'],a:2},
-    {q:'Bagian yang dijalankan bila semua kondisi salah adalah…',o:['else','if','while','return'],a:0}]},
+ q:[{q:'Percabangan dipakai untuk…',o:['Mengulang langkah','Memilih langkah berdasarkan kondisi','Menyimpan data','Menghentikan program']},
+    {q:'Jika nilai = 70, hasil kondisi “nilai > 70” adalah…',o:['Benar','Salah','Error','Tidak tentu']},
+    {q:'Pada if/else bertingkat, kondisi diperiksa…',o:['Dari bawah ke atas','Secara acak','Dari atas sampai ada yang benar','Semuanya sekaligus']},
+    {q:'Bagian yang dijalankan bila semua kondisi salah adalah…',o:['else','if','while','return']}]},
 {id:'m4',t:'Perulangan',d:'for dan while',s:[],q:[]},
 {id:'m5',t:'Array dan Fungsi',d:'Data berurutan dan potongan program',s:[],q:[]},
 {id:'m6',t:'Searching dan Sorting Dasar',d:'Mencari dan mengurutkan data',s:[],q:[]},
 {id:'m7',t:'Rekursi dan Kompleksitas',d:'Fungsi memanggil dirinya sendiri',s:[],q:[]}
 ];
 const app=document.getElementById('app');
-const blank=()=>({name:'',kelas:'',best:{},done:{},att:{}});
+const blank=()=>({name:'',kelas:'',sid:'',best:{},done:{},att:{},lab:{}});
 let S=blank(),R=null,Q=null;
 try{Object.assign(S,JSON.parse(localStorage.getItem('lms')||'{}'))}catch(e){}
 const save=()=>{try{localStorage.setItem('lms',JSON.stringify(S))}catch(e){}};
@@ -99,11 +107,16 @@ const unlocked=i=>i===0||best(M[i-1])>=PASS;
 const hash=s=>{let h=5381;for(const c of s)h=((h<<5)+h+c.charCodeAt(0))>>>0;return h.toString(36).toUpperCase().padStart(7,'0')};
 
 function gate(){
-  app.innerHTML=`<h1>Belajar algoritma, selangkah demi selangkah</h1><p class="mu">Isi data sekali saja. Nama dan kelas tampil di kartu hasil.</p><div class="card"><label>Nama lengkap<input type="text" id="nm" autocomplete="name"></label><label>Kelas<input type="text" id="kl" placeholder="mis. X-2"></label><p id="er" class="bad" style="margin:0 0 8px"></p><button id="go">Mulai belajar</button></div>`;
-  document.getElementById('go').onclick=()=>{
-    const n=nm.value.trim(),k=kl.value.trim();
-    if(!n||!k){er.textContent='Isi nama dan kelas terlebih dahulu.';return}
-    S.name=n;S.kelas=k;save();route();
+  app.innerHTML=`<h1>Belajar algoritma, selangkah demi selangkah</h1><p class="mu">Masuk dengan nama, kelas, dan kode kelas dari gurumu.</p><div class="card"><label>Nama lengkap<input type="text" id="nm" autocomplete="name"></label><label>Kelas<input type="text" id="kl" placeholder="mis. X-1"></label><label>Kode kelas<input type="text" id="kd" autocapitalize="characters" autocomplete="off"></label><p id="er" class="bad" style="margin:0 0 8px"></p><button id="go">Masuk</button></div><p class="mu" style="text-align:center"><a href="#/guru">Halaman guru</a></p>`;
+  document.getElementById('go').onclick=async()=>{
+    const n=nm.value.trim(),k=kl.value.trim(),c=kd.value.trim();
+    if(!n||!k||!c){er.textContent='Isi nama, kelas, dan kode kelas.';return}
+    er.textContent='Memeriksa…';
+    try{
+      const sid=await rpc('masuk',{p_nama:n,p_kelas:k,p_kode:c});
+      const p=await rpc('ambil_progres',{p_siswa:sid});
+      S.name=n;S.kelas=k;S.sid=sid;S.best=p.best||{};S.att=p.att||{};S.lab=p.lab||{};save();route();
+    }catch(e){er.textContent=e.message}
   };
 }
 
@@ -136,18 +149,21 @@ function quiz(m){
   document.getElementById('nx').onclick=()=>{if(!last){Q.i++;quiz(m);return}finish(m)};
 }
 
-function finish(m){
-  const ok=m.q.filter((q,i)=>Q.a[i]===q.a).length,sk=Math.round(ok/m.q.length*100);
-  S.att[m.id]=(S.att[m.id]||0)+1;S.best[m.id]=Math.max(best(m),sk);save();
-  const ts=new Date().toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'});
-  R={id:m.id,sk,ok,n:m.q.length,att:S.att[m.id],ts,kode:hash([S.name,S.kelas,m.id,sk,ts].join('|'))};
-  Q=null;location.hash='#/r';
+async function finish(m){
+  const bt=document.getElementById('nx');bt.disabled=true;bt.textContent='Menilai…';
+  try{
+    const r=await rpc('nilai_kuis',{p_siswa:S.sid,p_modul:m.id,p_jawaban:Q.a});
+    S.att[m.id]=r.percobaan;S.best[m.id]=Math.max(best(m),r.skor);save();
+    const ts=new Date().toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'});
+    R={id:m.id,sk:r.skor,ok:r.benar,n:r.total,att:r.percobaan,ts};
+    Q=null;location.hash='#/r';
+  }catch(e){bt.disabled=false;bt.textContent='Gagal terkirim, ketuk untuk coba lagi'}
 }
 
 function hasil(){
   if(!R){location.hash='#/';return}
   const i=M.findIndex(m=>m.id===R.id),m=M[i],p=R.sk>=PASS,nx=M[i+1];
-  app.innerHTML=`<div class="card kartu"><div class="mu">Kartu hasil, LMS Algoritma</div><h2 style="margin-top:6px">${esc(S.name)}, ${esc(S.kelas)}</h2><div class="mu">${m.t}</div><div class="skor ${p?'ok':'bad'}">${R.sk}</div><b class="${p?'ok':'bad'}">${p?'Lulus':'Belum lulus'}</b> <span class="mu">(minimum ${PASS})</span><table class="k"><tr><td>Jawaban benar</td><td>${R.ok} dari ${R.n}</td></tr><tr><td>Percobaan ke</td><td>${R.att}</td></tr><tr><td>Waktu</td><td>${R.ts}</td></tr></table><div class="mu" style="margin-top:10px">Kode verifikasi</div><div class="kode">${R.kode}</div></div><p class="mu">Screenshot kartu di atas${FORM_URL?', lalu kirim ke Google Form.':'.'}</p>${FORM_URL?`<a class="btn" href="${FORM_URL}" target="_blank" rel="noopener">Buka Google Form</a>`:''}`+(p&&nx&&nx.q.length?`<a class="btn alt" href="#/m/${nx.id}">Modul berikutnya</a>`:'')+`<a class="btn alt" href="#/q/${m.id}">Coba lagi</a><a class="btn alt" href="#/">Beranda</a>`;
+  app.innerHTML=`<div class="card kartu"><div class="mu">Kartu hasil, LMS Algoritma</div><h2 style="margin-top:6px">${esc(S.name)}, ${esc(S.kelas)}</h2><div class="mu">${m.t}</div><div class="skor ${p?'ok':'bad'}">${R.sk}</div><b class="${p?'ok':'bad'}">${p?'Lulus':'Belum lulus'}</b> <span class="mu">(minimum ${PASS})</span><table class="k"><tr><td>Jawaban benar</td><td>${R.ok} dari ${R.n}</td></tr><tr><td>Percobaan ke</td><td>${R.att}</td></tr><tr><td>Waktu</td><td>${R.ts}</td></tr></table></div><p class="mu">Nilaimu sudah tersimpan dan dapat dilihat gurumu.</p>`+(p&&nx&&nx.q.length?`<a class="btn alt" href="#/m/${nx.id}">Modul berikutnya</a>`:'')+`<a class="btn alt" href="#/q/${m.id}">Coba lagi</a><a class="btn alt" href="#/">Beranda</a>`;
 }
 
 const TK={F:'⬆ Maju',L:'↺ Putar kiri',R:'↻ Putar kanan',REP2:'🔁 Ulangi 2×',REP3:'🔁 Ulangi 3×',REP4:'🔁 Ulangi 4×',WHILE:'🔁 Selama depan kosong',END:'⏹ Akhir blok'};
@@ -201,15 +217,45 @@ function labLevel(){
       if(++i<r.out.length){setRob(r.out[i]);return}
       clearInterval(LT);
       if(!r.err&&r.x===G.gl[0]&&r.y===G.gl[1]){
-        const n=LP.length,s=n<=v.par?3:n<=v.par+3?2:1;S.lab=S.lab||{};S.lab[LI]=Math.max(lstar(LI),s);save();
+        const n=LP.length,s=n<=v.par?3:n<=v.par+3?2:1;S.lab=S.lab||{};S.lab[LI]=Math.max(lstar(LI),s);save();rpc('simpan_lab',{p_siswa:S.sid,p_level:LI,p_bintang:s}).catch(()=>{});
         msg.innerHTML=`<b class="ok">Berhasil! ${'⭐'.repeat(s)}</b><br>${n} blok (target ${v.par}).<br>`+(LI<LV.length-1?`<a class="btn" href="#/lab/${LI+1}">Level berikutnya</a>`:`<b>Semua level selesai. Hebat!</b>`);
       }else msg.textContent=r.err==='bump'?'Robot menabrak tembok atau batas papan. Periksa lagi perintahmu.':r.err==='long'?'Program terlalu lama, mungkin ada perulangan yang tidak berujung.':'Robot belum sampai di bendera. Coba lagi.';
     },350);
   };
 }
+let GT=null;
+function guruTabel(rows){
+  const mods=M.filter(m=>m.q.length),byK={};
+  rows.forEach(r=>{byK[r.kelas]=byK[r.kelas]||{};byK[r.kelas][r.siswa]=byK[r.kelas][r.siswa]||{};byK[r.kelas][r.siswa][r.modul]=r.skor_terbaik});
+  const head=mods.map(m=>`<td><b>${m.id.toUpperCase()}</b></td>`).join('');
+  return Object.keys(byK).map(k=>{
+    const body=Object.keys(byK[k]).map(sw=>`<tr><td>${esc(sw)}</td>${mods.map(m=>{const v=byK[k][sw][m.id];return `<td class="${v==null?'mu':v>=PASS?'ok':'bad'}">${v==null?'-':v}</td>`}).join('')}</tr>`).join('');
+    return `<h2 style="margin-top:16px">Kelas ${esc(k)}</h2><div style="overflow-x:auto"><table class="k"><tr><td><b>Siswa</b></td>${head}</tr>${body}</table></div>`;
+  }).join('');
+}
+async function guruData(){
+  const gd=document.getElementById('gd');gd.innerHTML='<p class="mu">Memuat…</p>';
+  try{
+    const rows=await api('/rest/v1/rekap_nilai?select=*&order=kelas,siswa',{headers:{Authorization:'Bearer '+GT}});
+    gd.innerHTML=`<p class="mu">Skor terbaik per modul (lulus min. ${PASS}).</p>`+(rows.length?guruTabel(rows):'<p class="mu">Belum ada nilai, atau akunmu belum terdaftar sebagai guru.</p>')+`<button class="alt" id="rl">Muat ulang</button>`;
+    document.getElementById('rl').onclick=guruData;
+  }catch(e){gd.innerHTML='<p class="bad">Gagal memuat data. Masuk ulang.</p>';GT=null}
+}
+function guru(){
+  app.innerHTML=`<a href="#/">← Beranda</a><h1>Halaman guru</h1>`+(GT?'':`<div class="card"><label>Email<input type="text" id="ge" autocomplete="username"></label><label>Kata sandi<input type="password" id="gp" autocomplete="current-password"></label><p id="ger" class="bad" style="margin:0 0 8px"></p><button id="gg">Masuk</button></div>`)+`<div id="gd"></div>`;
+  if(GT)return guruData();
+  document.getElementById('gg').onclick=async()=>{
+    const er=document.getElementById('ger');er.textContent='Masuk…';
+    try{
+      const j=await api('/auth/v1/token?grant_type=password',{method:'POST',body:JSON.stringify({email:ge.value.trim(),password:gp.value})});
+      GT=j.access_token;guru();
+    }catch(e){er.textContent='Email atau kata sandi salah.'}
+  };
+}
 function route(){
   scrollTo(0,0);
-  if(!S.name)return gate();
+  if(location.hash==='#/guru')return guru();
+  if(!S.name||!S.sid)return gate();
   const [,t,id]=location.hash.slice(1).split('/'),i=M.findIndex(m=>m.id===id),m=M[i];
   if(t==='r')return hasil();
   if(t==='lab')return lab(id);
