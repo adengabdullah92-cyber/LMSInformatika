@@ -37,7 +37,7 @@ const DOMAIN='siswa.example.com'; // harus sama dengan DOM di index.html
 const $=id=>document.getElementById(id);
 const emailOf=u=>u.trim().toLowerCase()+'@'+DOMAIN;
 const acak=()=>{const a='abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';return Array.from(crypto.getRandomValues(new Uint8Array(10)),b=>a[b%a.length]).join('')};
-function hdr(){const k=$('key').value.trim();return{apikey:k,'Content-Type':'application/json',...(k.startsWith('eyJ')?{Authorization:'Bearer '+k}:{})}}
+function hdr(){const k=$('key').value.trim();return{apikey:k,Authorization:'Bearer '+k,'Content-Type':'application/json'}}
 async function call(path,opt={}){
   const base=$('url').value.trim().replace(/\/$/,'');
   const r=await fetch(base+path,{...opt,headers:{...hdr(),...(opt.headers||{})}});
@@ -59,6 +59,7 @@ let hasil=[];
 $('go').onclick=async()=>{
   const lg=$('lg'),st=$('st'),pg=$('pg');
   if(!$('key').value.trim()){st.textContent='Isi secret key dulu.';return}
+  if($('key').value.trim().startsWith('sb_publishable')){st.textContent='Ini kunci publishable. Pakai secret key (sb_secret_… atau service_role).';return}
   let txt=$('ta').value;const file=$('f').files[0];if(file)txt=await file.text();
   if(!txt.trim()){st.textContent='Pilih file CSV atau tempel isinya.';return}
   const data=parseCsv(txt.replace(/^﻿/,'')),random=$('rnd').checked;
