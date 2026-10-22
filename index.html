@@ -469,7 +469,7 @@ let SES=null;try{SES=JSON.parse(localStorage.getItem(SK))}catch(e){}
 const keep=()=>{try{SES?localStorage.setItem(SK,JSON.stringify(SES)):localStorage.removeItem(SK)}catch(e){}};
 const setSes=j=>{SES={access_token:j.access_token,refresh_token:j.refresh_token,exp:Date.now()+(j.expires_in-30)*1000};keep()};
 async function raw(path,opt={},tok){
-  const r=await fetch(SB+path,{...opt,headers:{apikey:KEY,'Content-Type':'application/json',Authorization:'Bearer '+(tok||KEY),...(opt.headers||{})}});
+  const r=await fetch(SB+path,{...opt,headers:{apikey:KEY,'Content-Type':'application/json',...(tok?{Authorization:'Bearer '+tok}:{}),...(opt.headers||{})}});
   const t=await r.text();let j;try{j=JSON.parse(t)}catch(e){j=t}
   if(!r.ok){const e=new Error((j&&(j.message||j.msg||j.error_description||j.error))||'Tidak dapat terhubung ke server');e.status=r.status;throw e}
   return j;
