@@ -453,6 +453,13 @@ table.k td:last-child {
 <div id="app"></div>
 <script>
 const PASS=70;
+// Kode masuk internal ke server (siswa tidak lagi mengisinya). Isi dengan kode kelas lama yang masih diterima server.
+const KODE_MASUK='';
+// Kode buka modul (hash SHA-256). Guru membagikan kode asli saat siswa siap naik modul.
+const SALT='lms-algo-v1:';
+const UNLOCK={m2:'8674874fec25a20619a63e6d16c066d49ac4230acbb417b4bb316d65c59c9958',m3:'a96ac0f9b9acf5bf3ffcaa35be87602a2831e7d713d24627b45bb3c6fc10071b',m4:'bbed308cfcb8a5988c4372612d445b64f313e4cc605c00c2194fab56dc44eee3',m5:'991c2348805e580711f4349919d7edfb1445d4c5abac2d3c8f4f87c0c6ac168f',m6:'cfdd3dec311599f891e3bc9e8a3c36ff4215bc3bf90e4765f34bff1d8eac6b4c',m7:'51ce772440c4e17948e20ea54280041c2c922d2c19743cb0c0033164fddc2dfb'};
+const LUNLOCK={"1": "34f9c096ffe464d488876f2076ebdc7bce0d2b25d8a474ef3695ab9245d322b7", "2": "e3f1e9c275515381f47862910b3fc50d9ee2e5e853d807ce4fc4552aea9c99cf", "3": "03364b9db790ca2790f0a5ecf74b88e838c7ea4e31b85bfebc0b28e7424eac1d", "4": "00c9b360aa9da714a6423240db05362177bbaddc532f0259780ff7858a4ffc15"};
+async function sha(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 const SB='https://hihfnbnlhkkmxkrkknpv.supabase.co';
 const KEY='sb_publishable_TMWv8pAbDpkUel8StVSBoQ_ZGerMesa';
 async function api(path,opt={}){
@@ -490,23 +497,24 @@ const M=[
 {id:'m7',t:'Rekursi dan Kompleksitas',d:'Fungsi memanggil dirinya sendiri',s:[],q:[]}
 ];
 const app=document.getElementById('app');
-const blank=()=>({name:'',kelas:'',sid:'',best:{},done:{},att:{},lab:{}});
+const blank=()=>({name:'',kelas:'',sid:'',best:{},done:{},att:{},lab:{},open:{},lopen:{}});
 let S=blank(),R=null,Q=null;
 try{Object.assign(S,JSON.parse(localStorage.getItem('lms')||'{}'))}catch(e){}
 const save=()=>{try{localStorage.setItem('lms',JSON.stringify(S))}catch(e){}};
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const best=m=>S.best[m.id]??-1;
-const unlocked=i=>i===0||best(M[i-1])>=PASS;
+const passedPrev=i=>i===0||best(M[i-1])>=PASS;
+const unlocked=i=>i===0||(passedPrev(i)&&!!(S.open&&S.open[M[i].id]));
 const hash=s=>{let h=5381;for(const c of s)h=((h<<5)+h+c.charCodeAt(0))>>>0;return h.toString(36).toUpperCase().padStart(7,'0')};
 
 function gate(){
-  app.innerHTML=`<h1>Belajar algoritma, selangkah demi selangkah</h1><p class="mu">Masuk dengan nama, kelas, dan kode kelas dari gurumu.</p><div class="card"><label>Nama lengkap<input type="text" id="nm" autocomplete="name"></label><label>Kelas<input type="text" id="kl" placeholder="mis. X-1"></label><label>Kode kelas<input type="text" id="kd" autocapitalize="characters" autocomplete="off"></label><p id="er" class="bad" style="margin:0 0 8px"></p><button id="go">Masuk</button></div><p class="mu" style="text-align:center"><a href="#/guru">Halaman guru</a></p>`;
+  app.innerHTML=`<h1>Belajar algoritma, selangkah demi selangkah</h1><p class="mu">Masuk dengan nama dan kelasmu.</p><div class="card"><label>Nama lengkap<input type="text" id="nm" autocomplete="name"></label><label>Kelas<input type="text" id="kl" placeholder="mis. X-1"></label><p id="er" class="bad" style="margin:0 0 8px"></p><button id="go">Masuk</button></div><p class="mu" style="text-align:center"><a href="#/guru">Halaman guru</a></p>`;
   document.getElementById('go').onclick=async()=>{
-    const n=nm.value.trim(),k=kl.value.trim(),c=kd.value.trim();
-    if(!n||!k||!c){er.textContent='Isi nama, kelas, dan kode kelas.';return}
+    const n=nm.value.trim(),k=kl.value.trim();
+    if(!n||!k){er.textContent='Isi nama dan kelas.';return}
     er.textContent='Memeriksa…';
     try{
-      const sid=await rpc('masuk',{p_nama:n,p_kelas:k,p_kode:c});
+      const sid=await rpc('masuk',{p_nama:n,p_kelas:k,p_kode:KODE_MASUK});
       const p=await rpc('ambil_progres',{p_siswa:sid});
       S.name=n;S.kelas=k;S.sid=sid;S.best=p.best||{};S.att=p.att||{};S.lab=p.lab||{};save();route();
     }catch(e){er.textContent=e.message}
@@ -515,15 +523,25 @@ function gate(){
 
 function home(){
   const lulus=M.filter(m=>best(m)>=PASS).length;
-  app.innerHTML=`<h1>Algoritma Pemrograman</h1><p class="mu">Halo, ${esc(S.name)} (${esc(S.kelas)}). Lulus satu modul untuk membuka modul berikutnya.</p>
+  app.innerHTML=`<h1>Algoritma Pemrograman</h1><p class="mu">Halo, ${esc(S.name)} (${esc(S.kelas)}). Lulus satu modul, lalu masukkan kode dari gurumu untuk membuka modul berikutnya.</p>
   <div class="card"><div class="mu" style="margin-bottom:6px">${lulus} dari ${M.length} modul lulus</div><div class="bar"><i style="width:${lulus/M.length*100}%"></i></div></div>
   <a class="card" href="#/lab" style="display:block;color:inherit;text-decoration:none;border:2px solid var(--ac)"><b>🎮 Lab Koding: Robot Penjelajah</b><br><span class="mu">Susun perintah, bawa robot ke bendera. ⭐ ${labStars()} dari ${LV.length*3}</span></a>
   <div class="flow">`+M.map((m,i)=>{
     const ok=unlocked(i),has=m.q.length>0,b=best(m);
-    const st=!has?'Segera hadir':!ok?`Terkunci. Lulus modul ${i} (min. ${PASS}) untuk membuka`:b>=PASS?`<span class="ok">Lulus, skor ${b}</span>`:b>=0?`Skor terbaik ${b}, belum lulus`:'Belum dikerjakan';
+    const needCode=has&&!ok&&passedPrev(i);
+    const st=!has?'Segera hadir':needCode?'Kamu sudah lulus modul sebelumnya. Minta kode ke gurumu untuk lanjut.':!ok?`Terkunci. Lulus modul ${i} (min. ${PASS}) untuk membuka`:b>=PASS?`<span class="ok">Lulus, skor ${b}</span>`:b>=0?`Skor terbaik ${b}, belum lulus`:'Belum dikerjakan';
     const inner=`<span class="num">${ok&&has?i+1:'🔒'}</span><b>${m.t}</b><br><span class="mu">${m.d}</span><br><span class="mu">${st}</span>`;
+    if(needCode)return `<div class="card step"><span class="num">🔑</span><b>${m.t}</b><br><span class="mu">${m.d}</span><br><span class="mu">${st}</span><form class="ukf" data-id="${m.id}" style="margin-top:10px"><input type="text" class="uk" autocapitalize="characters" autocomplete="off" placeholder="Kode modul" aria-label="Kode modul ${i+1}" style="margin-bottom:6px"><button type="submit">Buka modul</button><p class="bad ue" style="margin:4px 0 0"></p></form></div>`;
     return ok&&has?`<a class="card step${b>=PASS?' pass':''}" href="#/m/${m.id}">${inner}</a>`:`<div class="card step lock">${inner}</div>`;
   }).join('')+`</div><p class="mu" style="text-align:center"><a href="#" id="rs" style="color:inherit">Ganti siswa</a></p>`;
+  app.querySelectorAll('.ukf').forEach(f=>f.onsubmit=async e=>{
+    e.preventDefault();
+    const id=f.dataset.id,v=f.querySelector('.uk').value.trim().toUpperCase(),er=f.querySelector('.ue');
+    if(!v){er.textContent='Masukkan kode dari gurumu.';return}
+    let h='';try{h=await sha(SALT+v)}catch(x){er.textContent='Browser tidak mendukung pemeriksaan kode.';return}
+    if(h===UNLOCK[id]){S.open=S.open||{};S.open[id]=true;save();location.hash='#/m/'+id;route()}
+    else er.textContent='Kode salah. Tanyakan lagi ke gurumu.';
+  });
   let t=0;
   document.getElementById('rs').onclick=e=>{e.preventDefault();if(!t){t=1;e.target.textContent='Ketuk lagi untuk menghapus semua progres';return}S=blank();save();route()};
 }
@@ -556,7 +574,7 @@ async function finish(m){
 function hasil(){
   if(!R){location.hash='#/';return}
   const i=M.findIndex(m=>m.id===R.id),m=M[i],p=R.sk>=PASS,nx=M[i+1];
-  app.innerHTML=`<div class="card kartu"><div class="mu">Kartu hasil, LMS Algoritma</div><h2 style="margin-top:6px">${esc(S.name)}, ${esc(S.kelas)}</h2><div class="mu">${m.t}</div><div class="skor ${p?'ok':'bad'}">${R.sk}</div><b class="${p?'ok':'bad'}">${p?'Lulus':'Belum lulus'}</b> <span class="mu">(minimum ${PASS})</span><table class="k"><tr><td>Jawaban benar</td><td>${R.ok} dari ${R.n}</td></tr><tr><td>Percobaan ke</td><td>${R.att}</td></tr><tr><td>Waktu</td><td>${R.ts}</td></tr></table></div><p class="mu">Nilaimu sudah tersimpan dan dapat dilihat gurumu.</p>`+(p&&nx&&nx.q.length?`<a class="btn alt" href="#/m/${nx.id}">Modul berikutnya</a>`:'')+`<a class="btn alt" href="#/q/${m.id}">Coba lagi</a><a class="btn alt" href="#/">Beranda</a>`;
+  app.innerHTML=`<div class="card kartu"><div class="mu">Kartu hasil, LMS Algoritma</div><h2 style="margin-top:6px">${esc(S.name)}, ${esc(S.kelas)}</h2><div class="mu">${m.t}</div><div class="skor ${p?'ok':'bad'}">${R.sk}</div><b class="${p?'ok':'bad'}">${p?'Lulus':'Belum lulus'}</b> <span class="mu">(minimum ${PASS})</span><table class="k"><tr><td>Jawaban benar</td><td>${R.ok} dari ${R.n}</td></tr><tr><td>Percobaan ke</td><td>${R.att}</td></tr><tr><td>Waktu</td><td>${R.ts}</td></tr></table></div><p class="mu">Nilaimu sudah tersimpan dan dapat dilihat gurumu.</p>`+(p&&nx&&nx.q.length?(S.open&&S.open[nx.id]?`<a class="btn alt" href="#/m/${nx.id}">Modul berikutnya</a>`:`<p class="mu">Lulus! Minta kode modul berikutnya ke gurumu, lalu masukkan di Beranda.</p>`):'')+`<a class="btn alt" href="#/q/${m.id}">Coba lagi</a><a class="btn alt" href="#/">Beranda</a>`;
 }
 
 const TK={F:'⬆ Maju',L:'↺ Putar kiri',R:'↻ Putar kanan',REP2:'🔁 Ulangi 2×',REP3:'🔁 Ulangi 3×',REP4:'🔁 Ulangi 4×',WHILE:'🔁 Selama depan kosong',END:'⏹ Akhir blok'};
@@ -570,11 +588,20 @@ const LV=[
 ];
 let LP=[],LI=0,LT=null;
 const lstar=i=>(S.lab&&S.lab[i])||0;
+const lopen=i=>i===0||!!(S.lopen&&S.lopen[i]);
 const labStars=()=>LV.reduce((a,_,i)=>a+lstar(i),0);
 const DX=[0,1,0,-1],DY=[-1,0,1,0];
-function lab(id){clearInterval(LT);const i=+id;if(id===undefined||id===''||!(i>=0&&i<LV.length)||(i>0&&!lstar(i-1)))return labList();LI=i;LP=[];labLevel()}
+function lab(id){clearInterval(LT);const i=+id;if(id===undefined||id===''||!(i>=0&&i<LV.length)||(i>0&&(!lstar(i-1)||!lopen(i))))return labList();LI=i;LP=[];labLevel()}
 function labList(){
-  app.innerHTML=`<a href="#/">← Beranda</a><h1>Lab Koding: Robot Penjelajah</h1><p class="mu">Susun perintah agar robot sampai ke bendera. Makin sedikit blok yang dipakai, makin banyak bintang.</p>`+LV.map((v,i)=>{const op=i===0||lstar(i-1)>0,s=lstar(i);const inner=`<span class="num">${op?i+1:'🔒'}</span><b>${v.n}</b><br><span class="mu">${op?'⭐'.repeat(s)+'☆'.repeat(3-s):'Selesaikan level sebelumnya'}</span>`;return op?`<a class="card lv" href="#/lab/${i}">${inner}</a>`:`<div class="card lv lock">${inner}</div>`}).join('');
+  app.innerHTML=`<a href="#/">← Beranda</a><h1>Lab Koding: Robot Penjelajah</h1><p class="mu">Susun perintah agar robot sampai ke bendera. Makin sedikit blok yang dipakai, makin banyak bintang.</p>`+LV.map((v,i)=>{const op=i===0||(lstar(i-1)>0&&lopen(i)),nc=i>0&&lstar(i-1)>0&&!lopen(i),s=lstar(i);const inner=`<span class="num">${op?i+1:'🔒'}</span><b>${v.n}</b><br><span class="mu">${op?'⭐'.repeat(s)+'☆'.repeat(3-s):'Selesaikan level sebelumnya'}</span>`;if(nc)return `<div class="card lv"><span class="num">🔑</span><b>${v.n}</b><br><span class="mu">Minta kode level ke gurumu</span><form class="lkf" data-i="${i}" style="margin-top:10px"><input type="text" class="uk" autocapitalize="characters" autocomplete="off" placeholder="Kode level" aria-label="Kode level ${i+1}" style="margin-bottom:6px"><button type="submit">Buka level</button><p class="bad ue" style="margin:4px 0 0"></p></form></div>`;return op?`<a class="card lv" href="#/lab/${i}">${inner}</a>`:`<div class="card lv lock">${inner}</div>`}).join('');
+  app.querySelectorAll('.lkf').forEach(f=>f.onsubmit=async e=>{
+    e.preventDefault();
+    const i=+f.dataset.i,v=f.querySelector('.uk').value.trim().toUpperCase(),er=f.querySelector('.ue');
+    if(!v){er.textContent='Masukkan kode dari gurumu.';return}
+    let h='';try{h=await sha(SALT+v)}catch(x){er.textContent='Browser tidak mendukung pemeriksaan kode.';return}
+    if(h===LUNLOCK[i]){S.lopen=S.lopen||{};S.lopen[i]=true;save();location.hash='#/lab/'+i;route()}
+    else er.textContent='Kode salah. Tanyakan lagi ke gurumu.';
+  });
 }
 function gridOf(v){let s,gl,w=[];v.g.forEach((r,y)=>[...r].forEach((c,x)=>{if(c==='S')s=[x,y];if(c==='G')gl=[x,y];if(c==='#')w.push(x+','+y)}));return{R:v.g.length,C:v.g[0].length,s,gl,w}}
 function parse(){const root=[],st=[root];for(const k of LP){const cur=st[st.length-1];if(k==='END'){if(st.length>1)st.pop();continue}if(k.startsWith('REP')){const n={t:'rep',n:+k[3],b:[]};cur.push(n);st.push(n.b)}else if(k==='WHILE'){const n={t:'while',b:[]};cur.push(n);st.push(n.b)}else cur.push({t:k})}return root}
@@ -611,7 +638,7 @@ function labLevel(){
       clearInterval(LT);
       if(!r.err&&r.x===G.gl[0]&&r.y===G.gl[1]){
         const n=LP.length,s=n<=v.par?3:n<=v.par+3?2:1;S.lab=S.lab||{};S.lab[LI]=Math.max(lstar(LI),s);save();rpc('simpan_lab',{p_siswa:S.sid,p_level:LI,p_bintang:s}).catch(()=>{});
-        msg.innerHTML=`<b class="ok">Berhasil! ${'⭐'.repeat(s)}</b><br>${n} blok (target ${v.par}).<br>`+(LI<LV.length-1?`<a class="btn" href="#/lab/${LI+1}">Level berikutnya</a>`:`<b>Semua level selesai. Hebat!</b>`);
+        msg.innerHTML=`<b class="ok">Berhasil! ${'⭐'.repeat(s)}</b><br>${n} blok (target ${v.par}).<br>`+(LI<LV.length-1?(lopen(LI+1)?`<a class="btn" href="#/lab/${LI+1}">Level berikutnya</a>`:`<span class="mu">Minta kode level berikutnya ke gurumu, lalu masukkan di daftar level.</span><br><a class="btn alt" href="#/lab">Daftar level</a>`):`<b>Semua level selesai. Hebat!</b>`);
       }else msg.textContent=r.err==='bump'?'Robot menabrak tembok atau batas papan. Periksa lagi perintahmu.':r.err==='long'?'Program terlalu lama, mungkin ada perulangan yang tidak berujung.':'Robot belum sampai di bendera. Coba lagi.';
     },350);
   };
