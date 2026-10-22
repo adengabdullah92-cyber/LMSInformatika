@@ -447,28 +447,44 @@ table.k td:last-child {
 @media (prefers-reduced-motion: reduce) {
   .rob, .rob u { transition: none; }
 }
+
+select{font-family:inherit;font-size:.95rem;padding:10px 12px;border:1.5px solid var(--bd);border-radius:12px;background:#0d131f;color:var(--tx);max-width:100%}
+table.g{width:100%;border-collapse:collapse;font-size:.88rem;white-space:nowrap}
+table.g th{text-align:left;color:var(--mu);font-weight:600;padding:8px 10px}
+table.g td{padding:8px 10px;border-top:1px solid var(--bd);vertical-align:top}
+table.g td:nth-child(n+4){text-align:center}
+table.g th:nth-child(n+4){text-align:center}
+.chip{display:inline-block;padding:0 8px;margin:1px 3px 1px 0;border:1px solid var(--bd);border-radius:99px;font-family:'JetBrains Mono',monospace;font-size:.75rem;color:var(--ac)}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <script>
 const PASS=70;
-// Kode masuk internal ke server (siswa tidak lagi mengisinya). Isi dengan kode kelas lama yang masih diterima server.
-const KODE_MASUK='';
-// Kode buka modul (hash SHA-256). Guru membagikan kode asli saat siswa siap naik modul.
-const SALT='lms-algo-v1:';
-const UNLOCK={m2:'8674874fec25a20619a63e6d16c066d49ac4230acbb417b4bb316d65c59c9958',m3:'a96ac0f9b9acf5bf3ffcaa35be87602a2831e7d713d24627b45bb3c6fc10071b',m4:'bbed308cfcb8a5988c4372612d445b64f313e4cc605c00c2194fab56dc44eee3',m5:'991c2348805e580711f4349919d7edfb1445d4c5abac2d3c8f4f87c0c6ac168f',m6:'cfdd3dec311599f891e3bc9e8a3c36ff4215bc3bf90e4765f34bff1d8eac6b4c',m7:'51ce772440c4e17948e20ea54280041c2c922d2c19743cb0c0033164fddc2dfb'};
-const LUNLOCK={"1": "34f9c096ffe464d488876f2076ebdc7bce0d2b25d8a474ef3695ab9245d322b7", "2": "e3f1e9c275515381f47862910b3fc50d9ee2e5e853d807ce4fc4552aea9c99cf", "3": "03364b9db790ca2790f0a5ecf74b88e838c7ea4e31b85bfebc0b28e7424eac1d", "4": "00c9b360aa9da714a6423240db05362177bbaddc532f0259780ff7858a4ffc15"};
-async function sha(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 const SB='https://hihfnbnlhkkmxkrkknpv.supabase.co';
 const KEY='sb_publishable_TMWv8pAbDpkUel8StVSBoQ_ZGerMesa';
-async function api(path,opt={}){
-  const r=await fetch(SB+path,{...opt,headers:{apikey:KEY,'Content-Type':'application/json',...(opt.headers||{})}});
+const DOM='@siswa.example.com'; // harus sama dengan DOMAIN di buat_akun.mjs
+const SK='lms_sesi';
+let SES=null;try{SES=JSON.parse(localStorage.getItem(SK))}catch(e){}
+const keep=()=>{try{SES?localStorage.setItem(SK,JSON.stringify(SES)):localStorage.removeItem(SK)}catch(e){}};
+const setSes=j=>{SES={access_token:j.access_token,refresh_token:j.refresh_token,exp:Date.now()+(j.expires_in-30)*1000};keep()};
+async function raw(path,opt={},tok){
+  const r=await fetch(SB+path,{...opt,headers:{apikey:KEY,'Content-Type':'application/json',Authorization:'Bearer '+(tok||KEY),...(opt.headers||{})}});
   const t=await r.text();let j;try{j=JSON.parse(t)}catch(e){j=t}
-  if(!r.ok)throw new Error((j&&(j.message||j.msg||j.error_description))||'Tidak dapat terhubung ke server');
+  if(!r.ok){const e=new Error((j&&(j.message||j.msg||j.error_description||j.error))||'Tidak dapat terhubung ke server');e.status=r.status;throw e}
   return j;
 }
-const rpc=(fn,args)=>api('/rest/v1/rpc/'+fn,{method:'POST',body:JSON.stringify(args)});
+async function refresh(){
+  try{setSes(await raw('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:JSON.stringify({refresh_token:SES.refresh_token})}))}
+  catch(e){if(e.status&&e.status<500){SES=null;keep()}const x=new Error('Sesi berakhir, silakan masuk lagi.');x.status=401;throw x}
+}
+async function api(path,opt){
+  if(!SES){const x=new Error('Belum masuk');x.status=401;throw x}
+  if(Date.now()>SES.exp)await refresh();
+  try{return await raw(path,opt,SES.access_token)}
+  catch(e){if(e.status===401){await refresh();return raw(path,opt,SES.access_token)}throw e}
+}
+const rpc=(fn,args={})=>api('/rest/v1/rpc/'+fn,{method:'POST',body:JSON.stringify(args)});
 const M=[
 {id:'m1',t:'Konsep Algoritma',d:'Algoritma, flowchart, pseudocode',
  s:[{h:'Apa itu algoritma?',b:`<p>Algoritma adalah urutan langkah yang jelas dan berhingga untuk menyelesaikan suatu masalah. Contohnya langkah membuat teh, atau mencari bilangan terbesar dari tiga angka.</p><p>Algoritma yang baik punya input, output, langkah yang tidak ambigu, pasti berhenti, dan efektif.</p>`},
@@ -497,65 +513,75 @@ const M=[
 {id:'m7',t:'Rekursi dan Kompleksitas',d:'Fungsi memanggil dirinya sendiri',s:[],q:[]}
 ];
 const app=document.getElementById('app');
-const blank=()=>({name:'',kelas:'',sid:'',best:{},done:{},att:{},lab:{},open:{},lopen:{}});
-let S=blank(),R=null,Q=null;
-try{Object.assign(S,JSON.parse(localStorage.getItem('lms')||'{}'))}catch(e){}
-const save=()=>{try{localStorage.setItem('lms',JSON.stringify(S))}catch(e){}};
+let D=null,R=null,Q=null,G=null,RT=0;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const best=m=>S.best[m.id]??-1;
+const wide=w=>{app.style.maxWidth=w?'1180px':'680px'};
+const has=m=>m.q.length>0;
+const opened=k=>!!(D&&D.buka&&D.buka.includes(k));
+const best=m=>(D&&D.best&&D.best[m.id])??-1;
 const passedPrev=i=>i===0||best(M[i-1])>=PASS;
-const unlocked=i=>i===0||(passedPrev(i)&&!!(S.open&&S.open[M[i].id]));
-const hash=s=>{let h=5381;for(const c of s)h=((h<<5)+h+c.charCodeAt(0))>>>0;return h.toString(36).toUpperCase().padStart(7,'0')};
+const unlocked=i=>i===0||(passedPrev(i)&&opened(M[i].id));
+const lopen=i=>i===0||opened('l'+i);
+const load=async()=>{D=await rpc('lms_data_saya')};
+const sortKelas=(a,b)=>a.kelas.localeCompare(b.kelas,'id',{numeric:true})||a.nama.localeCompare(b.nama,'id');
 
-function gate(){
-  app.innerHTML=`<h1>Belajar algoritma, selangkah demi selangkah</h1><p class="mu">Masuk dengan nama dan kelasmu.</p><div class="card"><label>Nama lengkap<input type="text" id="nm" autocomplete="name"></label><label>Kelas<input type="text" id="kl" placeholder="mis. X-1"></label><p id="er" class="bad" style="margin:0 0 8px"></p><button id="go">Masuk</button></div><p class="mu" style="text-align:center"><a href="#/guru">Halaman guru</a></p>`;
-  document.getElementById('go').onclick=async()=>{
-    const n=nm.value.trim(),k=kl.value.trim();
-    if(!n||!k){er.textContent='Isi nama dan kelas.';return}
-    er.textContent='Memeriksa…';
+async function logout(){
+  try{if(SES)await raw('/auth/v1/logout',{method:'POST'},SES.access_token)}catch(e){}
+  SES=null;D=null;G=null;Q=null;R=null;keep();location.hash='#/';route();
+}
+
+function login(msg){
+  wide(false);
+  app.innerHTML=`<h1>Belajar algoritma, selangkah demi selangkah</h1><p class="mu">Masuk dengan username dan kata sandi dari gurumu.</p><div class="card"><form id="lf"><label>Username<input type="text" id="un" autocomplete="username" autocapitalize="none" spellcheck="false"></label><label>Kata sandi<input type="password" id="pw" autocomplete="current-password"></label><p id="er" class="bad" style="margin:0 0 8px">${esc(msg||'')}</p><button type="submit" id="go">Masuk</button></form></div>`;
+  document.getElementById('lf').onsubmit=async e=>{
+    e.preventDefault();
+    const u=un.value.trim(),p=pw.value,er=document.getElementById('er'),bt=document.getElementById('go');
+    if(!u||!p){er.textContent='Isi username dan kata sandi.';return}
+    er.textContent='Memeriksa…';bt.disabled=true;
     try{
-      const sid=await rpc('masuk',{p_nama:n,p_kelas:k,p_kode:KODE_MASUK});
-      const p=await rpc('ambil_progres',{p_siswa:sid});
-      S.name=n;S.kelas=k;S.sid=sid;S.best=p.best||{};S.att=p.att||{};S.lab=p.lab||{};save();route();
-    }catch(e){er.textContent=e.message}
+      const j=await raw('/auth/v1/token?grant_type=password',{method:'POST',body:JSON.stringify({email:u.includes('@')?u:u.toLowerCase()+DOM,password:p})});
+      setSes(j);D=null;route();
+    }catch(x){bt.disabled=false;er.textContent=x.status===400||x.status===401?'Username atau kata sandi salah.':'Tidak dapat terhubung ke server. Coba lagi.'}
   };
 }
 
+function failed(e){
+  if(!SES)return login(e&&e.status===401?'Sesi berakhir, silakan masuk lagi.':'');
+  wide(false);
+  app.innerHTML=`<h1>Tidak dapat memuat data</h1><div class="card"><p class="bad">${esc(e.message)}</p><button id="rt">Coba lagi</button><button class="alt" id="lo">Keluar</button></div>`;
+  document.getElementById('rt').onclick=route;document.getElementById('lo').onclick=logout;
+}
+
 function home(){
+  wide(false);
   const lulus=M.filter(m=>best(m)>=PASS).length;
-  app.innerHTML=`<h1>Algoritma Pemrograman</h1><p class="mu">Halo, ${esc(S.name)} (${esc(S.kelas)}). Lulus satu modul, lalu masukkan kode dari gurumu untuk membuka modul berikutnya.</p>
-  <div class="card"><div class="mu" style="margin-bottom:6px">${lulus} dari ${M.length} modul lulus</div><div class="bar"><i style="width:${lulus/M.length*100}%"></i></div></div>
+  const rapor=M.filter(has).map(m=>{const a=(D.att&&D.att[m.id])||0,b=best(m);return `<tr><td>${m.t}</td><td>${a||'-'}</td><td class="${b>=PASS?'ok':''}">${b<0?'-':b}</td></tr>`}).join('');
+  app.innerHTML=`<h1>Algoritma Pemrograman</h1><p class="mu">Halo, ${esc(D.nama)} (${esc(D.kelas)}). Lulus satu modul, lalu tunggu gurumu membuka modul berikutnya.</p>
+  <div class="card"><div class="mu" style="margin-bottom:6px">${lulus} dari ${M.length} modul lulus</div><div class="bar"><i style="width:${lulus/M.length*100}%"></i></div>
+  <table class="k"><tr><td class="mu">Modul</td><td class="mu" style="font-weight:400">Percobaan</td><td class="mu" style="font-weight:400">Skor terbaik</td></tr>${rapor}</table></div>
   <a class="card" href="#/lab" style="display:block;color:inherit;text-decoration:none;border:2px solid var(--ac)"><b>🎮 Lab Koding: Robot Penjelajah</b><br><span class="mu">Susun perintah, bawa robot ke bendera. ⭐ ${labStars()} dari ${LV.length*3}</span></a>
   <div class="flow">`+M.map((m,i)=>{
-    const ok=unlocked(i),has=m.q.length>0,b=best(m);
-    const needCode=has&&!ok&&passedPrev(i);
-    const st=!has?'Segera hadir':needCode?'Kamu sudah lulus modul sebelumnya. Minta kode ke gurumu untuk lanjut.':!ok?`Terkunci. Lulus modul ${i} (min. ${PASS}) untuk membuka`:b>=PASS?`<span class="ok">Lulus, skor ${b}</span>`:b>=0?`Skor terbaik ${b}, belum lulus`:'Belum dikerjakan';
-    const inner=`<span class="num">${ok&&has?i+1:'🔒'}</span><b>${m.t}</b><br><span class="mu">${m.d}</span><br><span class="mu">${st}</span>`;
-    if(needCode)return `<div class="card step"><span class="num">🔑</span><b>${m.t}</b><br><span class="mu">${m.d}</span><br><span class="mu">${st}</span><form class="ukf" data-id="${m.id}" style="margin-top:10px"><input type="text" class="uk" autocapitalize="characters" autocomplete="off" placeholder="Kode modul" aria-label="Kode modul ${i+1}" style="margin-bottom:6px"><button type="submit">Buka modul</button><p class="bad ue" style="margin:4px 0 0"></p></form></div>`;
-    return ok&&has?`<a class="card step${b>=PASS?' pass':''}" href="#/m/${m.id}">${inner}</a>`:`<div class="card step lock">${inner}</div>`;
-  }).join('')+`</div><p class="mu" style="text-align:center"><a href="#" id="rs" style="color:inherit">Ganti siswa</a></p>`;
-  app.querySelectorAll('.ukf').forEach(f=>f.onsubmit=async e=>{
-    e.preventDefault();
-    const id=f.dataset.id,v=f.querySelector('.uk').value.trim().toUpperCase(),er=f.querySelector('.ue');
-    if(!v){er.textContent='Masukkan kode dari gurumu.';return}
-    let h='';try{h=await sha(SALT+v)}catch(x){er.textContent='Browser tidak mendukung pemeriksaan kode.';return}
-    if(h===UNLOCK[id]){S.open=S.open||{};S.open[id]=true;save();location.hash='#/m/'+id;route()}
-    else er.textContent='Kode salah. Tanyakan lagi ke gurumu.';
-  });
-  let t=0;
-  document.getElementById('rs').onclick=e=>{e.preventDefault();if(!t){t=1;e.target.textContent='Ketuk lagi untuk menghapus semua progres';return}S=blank();save();route()};
+    const ok=unlocked(i),h=has(m),b=best(m),wait=h&&!ok&&passedPrev(i);
+    const st=!h?'Segera hadir':wait?'Menunggu gurumu membuka modul ini':!ok?`Terkunci. Lulus modul ${i} (min. ${PASS}) untuk membuka`:b>=PASS?`<span class="ok">Lulus, skor ${b}</span>`:b>=0?`Skor terbaik ${b}, belum lulus`:'Belum dikerjakan';
+    const inner=`<span class="num">${ok&&h?i+1:'🔒'}</span><b>${m.t}</b><br><span class="mu">${m.d}</span><br><span class="mu">${st}</span>`;
+    return ok&&h?`<a class="card step${b>=PASS?' pass':''}" href="#/m/${m.id}">${inner}</a>`:`<div class="card step lock">${inner}</div>`;
+  }).join('')+`</div><p class="mu" style="text-align:center"><a href="#" id="rf" style="color:inherit">↻ Perbarui</a> · <a href="#" id="lo" style="color:inherit">Keluar</a></p>`;
+  document.getElementById('rf').onclick=e=>{e.preventDefault();route()};
+  document.getElementById('lo').onclick=e=>{e.preventDefault();logout()};
 }
 
 function modul(m){
-  const d=S.done[m.id]||[];
+  wide(false);
+  const k='lms_done_'+m.id,d=(()=>{try{return JSON.parse(localStorage.getItem(k))||[]}catch(e){return[]}})();
   app.innerHTML=`<a href="#/">← Beranda</a><h1>${m.t}</h1>`+m.s.map((s,i)=>`<div class="card"><h2>${s.h}</h2>${s.b}<label class="mu"><input type="checkbox" data-i="${i}" ${d[i]?'checked':''} style="margin-right:8px">Tandai selesai</label></div>`).join('')+`<a class="btn" href="#/q/${m.id}">Mulai kuis (min. ${PASS})</a>`;
-  app.querySelectorAll('input[type=checkbox]').forEach(c=>c.onchange=()=>{d[c.dataset.i]=c.checked;S.done[m.id]=d;save()});
+  app.querySelectorAll('input[type=checkbox]').forEach(c=>c.onchange=()=>{d[c.dataset.i]=c.checked;try{localStorage.setItem(k,JSON.stringify(d))}catch(e){}});
 }
 
 function quiz(m){
+  wide(false);
   if(!Q||Q.id!==m.id)Q={id:m.id,i:0,a:[]};
   const q=m.q[Q.i],last=Q.i===m.q.length-1;
-  app.innerHTML=`<a href="#/m/${m.id}">← Materi</a><p class="mu" style="margin-bottom:6px">${m.t}, soal ${Q.i+1} dari ${m.q.length}</p><div class="bar"><i style="width:${Q.i/m.q.length*100}%"></i></div><div class="card"><h2>${q.q}</h2>`+q.o.map((o,j)=>`<button class="opt${Q.a[Q.i]===j?' on':''}" data-j="${j}">${o}</button>`).join('')+`</div><button id="nx" ${Q.a[Q.i]===undefined?'disabled':''}>${last?'Selesai':'Lanjut'}</button>`;
+  app.innerHTML=`<a href="#/m/${m.id}">← Materi</a><p class="mu" style="margin-bottom:6px">${m.t}, soal ${Q.i+1} dari ${m.q.length}</p><div class="bar"><i style="width:${Q.i/m.q.length*100}%"></i></div><div class="card"><h2>${q.q}</h2>`+q.o.map((o,j)=>`<button class="opt${Q.a[Q.i]===j?' on':''}" data-j="${j}">${o}</button>`).join('')+`</div><button id="nx" ${Q.a[Q.i]===undefined?'disabled':''}>${last?'Selesai':'Lanjut'}</button><p id="qe" class="bad"></p>`;
   app.querySelectorAll('.opt').forEach(b=>b.onclick=()=>{Q.a[Q.i]=+b.dataset.j;quiz(m)});
   document.getElementById('nx').onclick=()=>{if(!last){Q.i++;quiz(m);return}finish(m)};
 }
@@ -563,20 +589,23 @@ function quiz(m){
 async function finish(m){
   const bt=document.getElementById('nx');bt.disabled=true;bt.textContent='Menilai…';
   try{
-    const r=await rpc('nilai_kuis',{p_siswa:S.sid,p_modul:m.id,p_jawaban:Q.a});
-    S.att[m.id]=r.percobaan;S.best[m.id]=Math.max(best(m),r.skor);save();
+    const r=await rpc('lms_kirim_kuis',{p_modul:m.id,p_jawaban:Array.from(Q.a,x=>x===undefined?null:x)});
+    D.att=D.att||{};D.best=D.best||{};D.att[m.id]=r.percobaan;D.best[m.id]=Math.max(best(m),r.skor);
     const ts=new Date().toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'});
     R={id:m.id,sk:r.skor,ok:r.benar,n:r.total,att:r.percobaan,ts};
     Q=null;location.hash='#/r';
-  }catch(e){bt.disabled=false;bt.textContent='Gagal terkirim, ketuk untuk coba lagi'}
+  }catch(e){bt.disabled=false;bt.textContent='Gagal terkirim, ketuk untuk coba lagi';document.getElementById('qe').textContent=e.message}
 }
 
 function hasil(){
+  wide(false);
   if(!R){location.hash='#/';return}
   const i=M.findIndex(m=>m.id===R.id),m=M[i],p=R.sk>=PASS,nx=M[i+1];
-  app.innerHTML=`<div class="card kartu"><div class="mu">Kartu hasil, LMS Algoritma</div><h2 style="margin-top:6px">${esc(S.name)}, ${esc(S.kelas)}</h2><div class="mu">${m.t}</div><div class="skor ${p?'ok':'bad'}">${R.sk}</div><b class="${p?'ok':'bad'}">${p?'Lulus':'Belum lulus'}</b> <span class="mu">(minimum ${PASS})</span><table class="k"><tr><td>Jawaban benar</td><td>${R.ok} dari ${R.n}</td></tr><tr><td>Percobaan ke</td><td>${R.att}</td></tr><tr><td>Waktu</td><td>${R.ts}</td></tr></table></div><p class="mu">Nilaimu sudah tersimpan dan dapat dilihat gurumu.</p>`+(p&&nx&&nx.q.length?(S.open&&S.open[nx.id]?`<a class="btn alt" href="#/m/${nx.id}">Modul berikutnya</a>`:`<p class="mu">Lulus! Minta kode modul berikutnya ke gurumu, lalu masukkan di Beranda.</p>`):'')+`<a class="btn alt" href="#/q/${m.id}">Coba lagi</a><a class="btn alt" href="#/">Beranda</a>`;
+  const nxt=p&&nx&&has(nx)?(opened(nx.id)?`<a class="btn alt" href="#/m/${nx.id}">Modul berikutnya</a>`:`<p class="mu">Lulus! Modul berikutnya akan dibuka oleh gurumu.</p>`):'';
+  app.innerHTML=`<div class="card kartu"><div class="mu">Kartu hasil, LMS Algoritma</div><h2 style="margin-top:6px">${esc(D.nama)}, ${esc(D.kelas)}</h2><div class="mu">${m.t}</div><div class="skor ${p?'ok':'bad'}">${R.sk}</div><b class="${p?'ok':'bad'}">${p?'Lulus':'Belum lulus'}</b> <span class="mu">(minimum ${PASS})</span><table class="k"><tr><td>Jawaban benar</td><td>${R.ok} dari ${R.n}</td></tr><tr><td>Percobaan ke</td><td>${R.att}</td></tr><tr><td>Waktu</td><td>${R.ts}</td></tr></table></div><p class="mu">Nilaimu sudah tersimpan dan dapat dilihat gurumu.</p>`+nxt+`<a class="btn alt" href="#/q/${m.id}">Coba lagi</a><a class="btn alt" href="#/">Beranda</a>`;
 }
 
+/* ---------- Lab Koding ---------- */
 const TK={F:'⬆ Maju',L:'↺ Putar kiri',R:'↻ Putar kanan',REP2:'🔁 Ulangi 2×',REP3:'🔁 Ulangi 3×',REP4:'🔁 Ulangi 4×',WHILE:'🔁 Selama depan kosong',END:'⏹ Akhir blok'};
 const BASIC=['F','L','R'],LOOPS=['F','L','R','REP2','REP3','REP4','END'];
 const LV=[
@@ -587,22 +616,19 @@ const LV=[
 {n:'Ular',h:'Gabungkan semuanya: urutan, ulangi, dan selama.',g:['S....','####.','.....','.####','G....'],d:1,par:13,ok:Object.keys(TK)}
 ];
 let LP=[],LI=0,LT=null;
-const lstar=i=>(S.lab&&S.lab[i])||0;
-const lopen=i=>i===0||!!(S.lopen&&S.lopen[i]);
+const lstar=i=>(D&&D.lab&&D.lab[i])||0;
 const labStars=()=>LV.reduce((a,_,i)=>a+lstar(i),0);
-const DX=[0,1,0,-1],DY=[-1,0,1,0];
 function lab(id){clearInterval(LT);const i=+id;if(id===undefined||id===''||!(i>=0&&i<LV.length)||(i>0&&(!lstar(i-1)||!lopen(i))))return labList();LI=i;LP=[];labLevel()}
 function labList(){
-  app.innerHTML=`<a href="#/">← Beranda</a><h1>Lab Koding: Robot Penjelajah</h1><p class="mu">Susun perintah agar robot sampai ke bendera. Makin sedikit blok yang dipakai, makin banyak bintang.</p>`+LV.map((v,i)=>{const op=i===0||(lstar(i-1)>0&&lopen(i)),nc=i>0&&lstar(i-1)>0&&!lopen(i),s=lstar(i);const inner=`<span class="num">${op?i+1:'🔒'}</span><b>${v.n}</b><br><span class="mu">${op?'⭐'.repeat(s)+'☆'.repeat(3-s):'Selesaikan level sebelumnya'}</span>`;if(nc)return `<div class="card lv"><span class="num">🔑</span><b>${v.n}</b><br><span class="mu">Minta kode level ke gurumu</span><form class="lkf" data-i="${i}" style="margin-top:10px"><input type="text" class="uk" autocapitalize="characters" autocomplete="off" placeholder="Kode level" aria-label="Kode level ${i+1}" style="margin-bottom:6px"><button type="submit">Buka level</button><p class="bad ue" style="margin:4px 0 0"></p></form></div>`;return op?`<a class="card lv" href="#/lab/${i}">${inner}</a>`:`<div class="card lv lock">${inner}</div>`}).join('');
-  app.querySelectorAll('.lkf').forEach(f=>f.onsubmit=async e=>{
-    e.preventDefault();
-    const i=+f.dataset.i,v=f.querySelector('.uk').value.trim().toUpperCase(),er=f.querySelector('.ue');
-    if(!v){er.textContent='Masukkan kode dari gurumu.';return}
-    let h='';try{h=await sha(SALT+v)}catch(x){er.textContent='Browser tidak mendukung pemeriksaan kode.';return}
-    if(h===LUNLOCK[i]){S.lopen=S.lopen||{};S.lopen[i]=true;save();location.hash='#/lab/'+i;route()}
-    else er.textContent='Kode salah. Tanyakan lagi ke gurumu.';
-  });
+  wide(false);
+  app.innerHTML=`<a href="#/">← Beranda</a><h1>Lab Koding: Robot Penjelajah</h1><p class="mu">Susun perintah agar robot sampai ke bendera. Makin sedikit blok yang dipakai, makin banyak bintang. Level berikutnya dibuka oleh gurumu.</p>`+LV.map((v,i)=>{
+    const prev=i===0||lstar(i-1)>0,op=prev&&lopen(i),s=lstar(i);
+    const sub=op?'⭐'.repeat(s)+'☆'.repeat(3-s):prev?'Menunggu gurumu membuka level ini':'Selesaikan level sebelumnya';
+    const inner=`<span class="num">${op?i+1:'🔒'}</span><b>${v.n}</b><br><span class="mu">${sub}</span>`;
+    return op?`<a class="card lv" href="#/lab/${i}">${inner}</a>`:`<div class="card lv lock">${inner}</div>`;
+  }).join('');
 }
+const DX=[0,1,0,-1],DY=[-1,0,1,0];
 function gridOf(v){let s,gl,w=[];v.g.forEach((r,y)=>[...r].forEach((c,x)=>{if(c==='S')s=[x,y];if(c==='G')gl=[x,y];if(c==='#')w.push(x+','+y)}));return{R:v.g.length,C:v.g[0].length,s,gl,w}}
 function parse(){const root=[],st=[root];for(const k of LP){const cur=st[st.length-1];if(k==='END'){if(st.length>1)st.pop();continue}if(k.startsWith('REP')){const n={t:'rep',n:+k[3],b:[]};cur.push(n);st.push(n.b)}else if(k==='WHILE'){const n={t:'while',b:[]};cur.push(n);st.push(n.b)}else cur.push({t:k})}return root}
 function sim(G,d0){
@@ -637,49 +663,86 @@ function labLevel(){
       if(++i<r.out.length){setRob(r.out[i]);return}
       clearInterval(LT);
       if(!r.err&&r.x===G.gl[0]&&r.y===G.gl[1]){
-        const n=LP.length,s=n<=v.par?3:n<=v.par+3?2:1;S.lab=S.lab||{};S.lab[LI]=Math.max(lstar(LI),s);save();rpc('simpan_lab',{p_siswa:S.sid,p_level:LI,p_bintang:s}).catch(()=>{});
-        msg.innerHTML=`<b class="ok">Berhasil! ${'⭐'.repeat(s)}</b><br>${n} blok (target ${v.par}).<br>`+(LI<LV.length-1?(lopen(LI+1)?`<a class="btn" href="#/lab/${LI+1}">Level berikutnya</a>`:`<span class="mu">Minta kode level berikutnya ke gurumu, lalu masukkan di daftar level.</span><br><a class="btn alt" href="#/lab">Daftar level</a>`):`<b>Semua level selesai. Hebat!</b>`);
+        const n=LP.length,s=n<=v.par?3:n<=v.par+3?2:1;D.lab=D.lab||{};D.lab[LI]=Math.max(lstar(LI),s);rpc('lms_kirim_lab',{p_level:LI,p_bintang:s}).catch(()=>{});
+        msg.innerHTML=`<b class="ok">Berhasil! ${'⭐'.repeat(s)}</b><br>${n} blok (target ${v.par}).<br>`+(LI<LV.length-1?(lopen(LI+1)?`<a class="btn" href="#/lab/${LI+1}">Level berikutnya</a>`:`<span class="mu">Level berikutnya akan dibuka oleh gurumu.</span><br><a class="btn alt" href="#/lab">Daftar level</a>`):`<b>Semua level selesai. Hebat!</b>`);
       }else msg.textContent=r.err==='bump'?'Robot menabrak tembok atau batas papan. Periksa lagi perintahmu.':r.err==='long'?'Program terlalu lama, mungkin ada perulangan yang tidak berujung.':'Robot belum sampai di bendera. Coba lagi.';
     },350);
   };
 }
-let GT=null;
-function guruTabel(rows){
-  const mods=M.filter(m=>m.q.length),byK={};
-  rows.forEach(r=>{byK[r.kelas]=byK[r.kelas]||{};byK[r.kelas][r.siswa]=byK[r.kelas][r.siswa]||{};byK[r.kelas][r.siswa][r.modul]=r.skor_terbaik});
-  const head=mods.map(m=>`<td><b>${m.id.toUpperCase()}</b></td>`).join('');
-  return Object.keys(byK).map(k=>{
-    const body=Object.keys(byK[k]).map(sw=>`<tr><td>${esc(sw)}</td>${mods.map(m=>{const v=byK[k][sw][m.id];return `<td class="${v==null?'mu':v>=PASS?'ok':'bad'}">${v==null?'-':v}</td>`}).join('')}</tr>`).join('');
-    return `<h2 style="margin-top:16px">Kelas ${esc(k)}</h2><div style="overflow-x:auto"><table class="k"><tr><td><b>Siswa</b></td>${head}</tr>${body}</table></div>`;
-  }).join('');
-}
-async function guruData(){
-  const gd=document.getElementById('gd');gd.innerHTML='<p class="mu">Memuat…</p>';
-  try{
-    const rows=await api('/rest/v1/rekap_nilai?select=*&order=kelas,siswa',{headers:{Authorization:'Bearer '+GT}});
-    gd.innerHTML=`<p class="mu">Skor terbaik per modul (lulus min. ${PASS}).</p>`+(rows.length?guruTabel(rows):'<p class="mu">Belum ada nilai, atau akunmu belum terdaftar sebagai guru.</p>')+`<button class="alt" id="rl">Muat ulang</button>`;
-    document.getElementById('rl').onclick=guruData;
-  }catch(e){gd.innerHTML='<p class="bad">Gagal memuat data. Masuk ulang.</p>';GT=null}
+/* ---------- Dashboard guru ---------- */
+const KUNCI=[...M.slice(1).map((m,i)=>({k:'m'+(i+2),t:`Modul ${i+2}: ${m.t}`})),...LV.slice(1).map((v,i)=>({k:'l'+(i+1),t:`Lab level ${i+2}: ${v.n}`}))];
+const kLabel=k=>(KUNCI.find(x=>x.k===k)||{t:k}).t;
+const kShort=k=>k[0]==='m'?'M'+k.slice(1):'L'+(+k.slice(1)+1);
+const labSum=r=>Object.values(r.lab||{}).reduce((a,b)=>a+b,0);
+async function guruLoad(){
+  const b=document.getElementById('gr');if(b)b.textContent='Memuat…';
+  try{G.rows=(await rpc('lms_rekap_guru')).sort(sortKelas);G.err=''}catch(e){if(e.status===401||!SES)return route();G.err=e.message}
+  if(b)b.textContent='↻ Muat ulang';
+  drawG();
 }
 function guru(){
-  app.innerHTML=`<a href="#/">← Beranda</a><h1>Halaman guru</h1>`+(GT?'':`<div class="card"><label>Email<input type="text" id="ge" autocomplete="username"></label><label>Kata sandi<input type="password" id="gp" autocomplete="current-password"></label><p id="ger" class="bad" style="margin:0 0 8px"></p><button id="gg">Masuk</button></div>`)+`<div id="gd"></div>`;
-  if(GT)return guruData();
-  document.getElementById('gg').onclick=async()=>{
-    const er=document.getElementById('ger');er.textContent='Masuk…';
-    try{
-      const j=await api('/auth/v1/token?grant_type=password',{method:'POST',body:JSON.stringify({email:ge.value.trim(),password:gp.value})});
-      GT=j.access_token;guru();
-    }catch(e){er.textContent='Email atau kata sandi salah.'}
-  };
+  wide(true);
+  if(!G)G={rows:null,kelas:'',q:'',sel:new Set(),kunci:'m2',err:''};
+  app.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><h1 style="margin:0">Dashboard guru</h1><div><button class="alt" id="gr">↻ Muat ulang</button><button class="alt" id="gx">⬇ Ekspor CSV</button><button class="alt" id="go">Keluar</button></div></div><p class="mu">${esc(D.nama)}. Pantau nilai dan progres, lalu buka modul atau level lab untuk siswa.</p>
+  <div class="card" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><select id="gk" aria-label="Kelas"><option value="">Semua kelas</option></select><input type="text" id="gq" placeholder="Cari nama atau username" style="max-width:280px;margin:0" aria-label="Cari"></div>
+  <div id="gs"></div><div id="gb"></div><div class="card" style="padding:6px 12px;overflow-x:auto" id="gt"></div>`;
+  document.getElementById('gr').onclick=guruLoad;
+  document.getElementById('go').onclick=logout;
+  document.getElementById('gx').onclick=exportCsv;
+  document.getElementById('gk').onchange=e=>{G.kelas=e.target.value;G.sel.clear();drawG()};
+  document.getElementById('gq').oninput=e=>{G.q=e.target.value.trim().toLowerCase();drawG()};
+  if(G.rows)drawG();else guruLoad();
 }
-function route(){
-  scrollTo(0,0);
-  if(location.hash==='#/guru')return guru();
-  if(!S.name||!S.sid)return gate();
-  const [,t,id]=location.hash.slice(1).split('/'),i=M.findIndex(m=>m.id===id),m=M[i];
+const shown=()=>G.rows.filter(r=>(!G.kelas||r.kelas===G.kelas)&&(!G.q||r.nama.toLowerCase().includes(G.q)||r.username.toLowerCase().includes(G.q)));
+function drawG(){
+  const gt=document.getElementById('gt');if(!gt)return;
+  if(!G.rows){gt.innerHTML=G.err?`<p class="bad">${esc(G.err)}</p>`:'<p class="mu">Memuat…</p>';return}
+  const sk=document.getElementById('gk'),ks=[...new Set(G.rows.map(r=>r.kelas))].sort((a,b)=>a.localeCompare(b,'id',{numeric:true}));
+  if(sk.options.length-1!==ks.length){sk.innerHTML='<option value="">Semua kelas</option>'+ks.map(k=>`<option value="${esc(k)}">Kelas ${esc(k)}</option>`).join('');sk.value=G.kelas}
+  const rows=shown(),n=rows.length,mods=M.filter(has);
+  const masuk=rows.filter(r=>r.terakhir_masuk).length;
+  const lulus=mods.map(m=>{const c=rows.filter(r=>((r.best||{})[m.id]??-1)>=PASS).length;return `<div style="margin:8px 0"><div class="mu">Lulus ${esc(m.t)}: <b>${c}</b> / ${n}</div><div class="bar"><i style="width:${n?c/n*100:0}%"></i></div></div>`}).join('');
+  const akses=KUNCI.map(x=>({x,c:rows.filter(r=>(r.buka||[]).includes(x.k)).length})).filter(a=>a.c>0).map(a=>`<span class="chip">${kShort(a.x.k)} ${a.c}/${n}</span>`).join('')||'<span class="mu">belum ada</span>';
+  document.getElementById('gs').innerHTML=`<div class="card"><b>${n} siswa</b>${G.kelas?' di kelas '+esc(G.kelas):''} · sudah pernah masuk: <b>${masuk}</b> · belum: <b>${n-masuk}</b>${lulus}<div class="mu" style="margin-top:8px">Akses yang sudah dibuka: ${akses}</div></div>`;
+  const selShown=rows.filter(r=>G.sel.has(r.id)),target=selShown.length?selShown:rows;
+  document.getElementById('gb').innerHTML=`<div class="card" style="border-color:var(--ac)"><b>Buka atau tutup akses</b><div class="mu" style="margin:4px 0 10px">Berlaku untuk <b>${target.length}</b> siswa ${selShown.length?'(yang dicentang)':'(semua yang tampil, atau centang siswa tertentu di tabel)'}.</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="gc" aria-label="Pilih modul atau level">${KUNCI.map(x=>`<option value="${x.k}"${x.k===G.kunci?' selected':''}>${esc(x.t)}</option>`).join('')}</select><button id="gbuka">Buka</button><button class="alt" id="gtutup">Tutup</button></div></div>`;
+  document.getElementById('gc').onchange=e=>{G.kunci=e.target.value};
+  const aksi=async buka=>{
+    if(!target.length)return;
+    if(!confirm(`${buka?'Buka':'Tutup'} "${kLabel(G.kunci)}" untuk ${target.length} siswa${G.kelas&&!selShown.length?' kelas '+G.kelas:''}?`))return;
+    const b1=document.getElementById('gbuka'),b2=document.getElementById('gtutup');b1.disabled=b2.disabled=true;
+    try{await rpc(buka?'lms_buka_akses':'lms_tutup_akses',{p_user_ids:target.map(r=>r.id),p_kunci:G.kunci});G.sel.clear();await guruLoad()}
+    catch(e){alert(e.message);b1.disabled=b2.disabled=false}
+  };
+  document.getElementById('gbuka').onclick=()=>aksi(true);
+  document.getElementById('gtutup').onclick=()=>aksi(false);
+  const allOn=n>0&&selShown.length===n;
+  gt.innerHTML=`<table class="g"><thead><tr><th><input type="checkbox" id="ga" aria-label="Pilih semua yang tampil" ${allOn?'checked':''}></th><th>Nama</th><th>Kelas</th>${mods.map(m=>`<th title="${esc(m.t)}">${m.id.toUpperCase()}</th>`).join('')}<th>Lab ⭐</th><th>Akses</th><th>Terakhir masuk</th></tr></thead><tbody>`+rows.map(r=>`<tr><td><input type="checkbox" data-id="${r.id}" ${G.sel.has(r.id)?'checked':''} aria-label="Pilih ${esc(r.nama)}"></td><td>${esc(r.nama)}<div class="mu" style="font-size:.75rem">${esc(r.username)}</div></td><td>${esc(r.kelas)}</td>${mods.map(m=>{const v=(r.best||{})[m.id];return `<td class="${v==null?'mu':v>=PASS?'ok':'bad'}" title="${(r.att||{})[m.id]||0} percobaan">${v==null?'-':v}</td>`}).join('')}<td>${labSum(r)||'-'}</td><td>${(r.buka||[]).slice().sort().map(k=>`<span class="chip">${kShort(k)}</span>`).join('')||'<span class="mu">-</span>'}</td><td class="${r.terakhir_masuk?'':'mu'}">${r.terakhir_masuk?new Date(r.terakhir_masuk).toLocaleString('id-ID',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'belum'}</td></tr>`).join('')+`</tbody></table>`+(n?'':'<p class="mu">Tidak ada siswa yang cocok.</p>');
+  document.getElementById('ga').onchange=e=>{rows.forEach(r=>e.target.checked?G.sel.add(r.id):G.sel.delete(r.id));drawG()};
+  gt.querySelectorAll('tbody input[type=checkbox]').forEach(c=>c.onchange=()=>{c.checked?G.sel.add(c.dataset.id):G.sel.delete(c.dataset.id);drawG()});
+}
+function exportCsv(){
+  if(!G||!G.rows)return;
+  const mods=M.filter(has),q=v=>'"'+String(v).replace(/"/g,'""')+'"';
+  const head=['Nama','Kelas','Username','Sudah masuk',...mods.map(m=>m.t),'Bintang lab','Akses dibuka'];
+  const lines=[head,...shown().map(r=>[r.nama,r.kelas,r.username,r.terakhir_masuk?'sudah':'belum',...mods.map(m=>(r.best||{})[m.id]??''),labSum(r),(r.buka||[]).slice().sort().map(kShort).join(' ')])];
+  const blob=new Blob(['﻿'+lines.map(l=>l.map(q).join(',')).join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='rekap-nilai.csv';document.body.appendChild(a);a.click();a.remove();
+}
+
+async function route(){
+  const my=++RT;scrollTo(0,0);
+  if(!SES){D=null;return login()}
+  const [,t,id]=location.hash.slice(1).split('/');
+  if(!D||!t||(t==='lab'&&id===undefined)){
+    try{await load()}catch(e){if(my!==RT)return;if(!D)return failed(e)}
+    if(my!==RT)return;
+  }
+  if(D.peran==='guru')return guru();
+  const i=M.findIndex(m=>m.id===id),m=M[i];
   if(t==='r')return hasil();
   if(t==='lab')return lab(id);
-  if((t==='m'||t==='q')&&m&&m.q.length&&unlocked(i)){
+  if((t==='m'||t==='q')&&m&&has(m)&&unlocked(i)){
     if(t==='m'){Q=null;return modul(m)}
     return quiz(m);
   }
